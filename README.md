@@ -7,12 +7,12 @@
         * 使用coursera-dl下载出现"HTTPError:400"问题，请参考[此解决方案](https://github.com/coursera-dl/coursera-dl/issues/702#issuecomment-506929946)
     * Youtube上的课程，例如OCW，可以使用[youtube-dl](https://rg3.github.io/youtube-dl/)进行下载。注意需要将对应的字幕也下载下来
 * 将字幕文件处理成txt脚本
-    * 处理单个文件：``` python sub2txt.py -i <subtitle file name>```
-    * 处理整个目录：``` python sub2txt.py -p <path>```
+    * 处理单个文件：``` python sub2txt.py <subtitle file name>```
+    * 处理整个目录：``` python sub2txt.py <path>```
 * 手动编辑txt脚本，将你认为不重要的部分删除后保存，尽量不要修改txt文件名
 * 按编辑后的txt脚本剪辑视频课程：
-    * 处理单个文件：```python clip_by_txt.py -t <txt file>```
-    * 处理整个目录：```python clip_by_txt.py -p <path>```
+    * 处理单个文件：```python clip_by_txt.py <txt file>```
+    * 处理整个目录：```python clip_by_txt.py <path>```
 
 剪辑完成的视频将以summary_开头，存储在视频课程原位，并且附带有srt的字幕。
 

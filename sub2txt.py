@@ -6,7 +6,7 @@
 # In[2]:
 
 
-import srt
+import srt # https://github.com/cdown/srt 同时考虑转换到 https://github.com/tkarabela/pysubs2 因为可以支持ass
 import webvtt
 import os
 import pandas as pd
@@ -57,7 +57,7 @@ def vtt_to_df(vtt_filename):
 
 
 def srt_to_df(srt_filename):
-    with open(srt_filename) as f:
+    with open(srt_filename, 'r', encoding='utf-8-sig') as f:
         srt_content=f.read()
 #         srt_content=srt.make_legal_content(srt_content)
     df=pd.DataFrame([[str(s.start).split(" ")[-1],
@@ -154,13 +154,10 @@ def arg_parse():
     解析命令行参数
     '''
     # 创建解析步骤
-    parser = argparse.ArgumentParser(description='Process TTS')
+    parser = argparse.ArgumentParser(description='Convert subtitle file to txt.')
 
     # 添加参数步骤
-    parser.add_argument('-i','--input',  type=str, 
-                       help='subtitle file, the filetype should be vtt or srt')
-    parser.add_argument('-p','--path',  type=str, 
-                       help='path')
+    parser.add_argument("input",type=str, help='subtitle file, the filetype should be vtt or srt.                         \n or a path' )
     parser.add_argument('-o','--output',  type=str, 
                        help='output filename.')
 
@@ -172,19 +169,33 @@ def arg_parse():
 # In[ ]:
 
 
+def display_well_done(input_filename, output_filename):
+    print("\n   {} \n-> {} ".format(os.path.basename(input_filename), os.path.basename(output_filename)))
+
+
+# In[ ]:
+
+
 if __name__=="__main__":
     # 解析命令行参数
     args=arg_parse()
-    if args.path:
-        file_list=get_sub_files(args.path,[],("vtt","srt"))
-        for input_filename in file_list:
+    subtitle_type=("vtt","srt") # 考虑增加ass的支持，但似乎还没找到同时支持vtt，srt，ass三者的库，当然写个互转也可以，但比较懒
+    
+    if os.path.isdir(args.input): # 如果是处理目录
+        file_list=get_sub_files(args.input,[],subtitle_type) # 遍历目录下所有字幕文件
+        for input_filename in file_list: # 对每一个文件进行处理
             output_filename=repeat_input_to_output_filename(input_filename)
             one_sub_to_txt(input_filename, output_filename)
-    elif args.input:
-        if args.output:
+            display_well_done(input_filename, output_filename)
+    elif os.path.isfile(args.input): # 如果是处理单个文件
+        if args.output: # 如果指定了输出名称，使用指定的文件名
             one_sub_to_txt(args.input, args.output)
-        else:
+            display_well_done(args.input, args.output)
+        else: # 若没有指定输出名称，则将后缀直接替换为txt使用
             output_filename=repeat_input_to_output_filename(args.input)
             one_sub_to_txt(args.input, output_filename)
+            display_well_done(args.input, output_filename)
+    else:
+        raise Exception("not a file or a path") 
             
 

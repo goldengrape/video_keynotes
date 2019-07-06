@@ -2,22 +2,33 @@
 # coding: utf-8
 
 # 根据文本来剪辑视频
+# 
+# 程序依赖
+# 
+# * srt https://github.com/cdown/srt
+# * webvtt-py https://github.com/glut23/webvtt-py
+# 
+# 来处理字幕
 
 # In[ ]:
 
 
-import srt
-import webvtt
+import srt # https://github.com/cdown/srt
+import webvtt # https://github.com/glut23/webvtt-py
 import os
 import pandas as pd
 import difflib
 import subprocess
-import youtube_dl
 import argparse
 from tempfile import TemporaryDirectory
 
 from sub2txt import sub_to_df, df_to_txt,get_sub_files
 
+
+# 如果没有编辑txt文本来生成摘要，那么就没有必要去对视频进行剪辑，否则按照现在的做法会把整个视频切分成一句一句再合并起来。
+# 所以需要判断一个评分，看看字幕文件和txt文本之间是否有足够的内容差别。
+# 
+# difflib.SequenceMatcher(None, text1, text2).quick_ratio()可以快速生成两个文本之间相似程度的评分，如果高于阈值，就不必进行后续剪辑的处理了
 
 # In[ ]:
 
@@ -27,11 +38,13 @@ def summary_score(df, txt):
     比较字幕文件和summary文件是否有差异，如果差异太小，后续则不做视频剪辑处理
     '''
     df_txt=df_to_txt(df)
-    s=difflib.SequenceMatcher(None, df_txt, txt)
+    s=difflib.SequenceMatcher(None, df_txt, txt) 
     return(s.quick_ratio())
 
 
 # 在路径中找到与输入文件名最接近的文件名
+# 
+# difflib.SequenceMatcher(None, text1, text2).ratio()可以快速生成两个文本之间相似程度的评分，用这个来找到目录中最相似的文件名。因为字幕文件往往会带有语言标记，比如.zh-CN.srt之类，懒得去一步一步判断了，直接用评分来比较好了。
 
 # In[ ]:
 
@@ -45,6 +58,8 @@ def get_most_simliar_filename(target_filename, path, ext):
     max_index=simliar_score.index(max(simliar_score))
     return(candidate[max_index])
 
+
+# 在字幕df中，一句一句寻找text中的内容，将最接近的挑出来
 
 # In[ ]:
 
@@ -63,6 +78,8 @@ def find_text_in_df(text,df):
 
 
 # 重建字幕
+# 
+# 挑出来的字幕数据，想重建成一个新的字幕文件，但是挑选出来的字幕数据，时间戳是原来的时间，需要合并到一起，那么先计算每一句话花了多少时间，再累积起来。
 
 # In[ ]:
 
@@ -86,6 +103,8 @@ def rebuild_sub(df_chosen,output_filename):
         f.write(srt_content)
 
 
+# 利用ffmpeg来根据起止时间剪辑视频。
+
 # In[ ]:
 
 
@@ -101,6 +120,12 @@ def clip_video(video_filename, start, end,output_filename):
          output_filename]
     p=subprocess.run(ffmpeg_command, shell=False, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     return(p.stdout.decode("utf-8"))
+
+
+# In[ ]:
+
+
+
 
 
 # In[ ]:
@@ -129,24 +154,26 @@ def clip_video_by_keynote(df, video_filename, final_output):
                        '-y',
                        final_output # final_output的路径并不在temp目录下，所以不会被销毁
                        ]
-        subprocess.run(ff_concat_command, shell=False)
+        ff=subprocess.run(ff_concat_command, shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return ff
 
 
 # In[ ]:
 
 
 def clip_one(txt_file, srt_file, video_file, output_file, threshold=0.8):
+    print("{}".format(os.path.basename(video_file)))
     with open(txt_file,"r") as f:
         txt=f.read()
     df_ori=sub_to_df(srt_file)
     
     if summary_score(df_ori,txt)> threshold: # 太接近，没必要进行剪辑了。
-        print("Pass ",os.path.basename(video_file))
+        print("...Pass ")
         return 
     df_chosen=find_text_in_df(txt,df_ori)
     clip_video_by_keynote(df_chosen, video_file, output_file)
     rebuild_sub(df_chosen,output_file)
-    print("Clip ", os.path.basename(video_file))
+    print("...Done ")
 
 
 # In[ ]:
@@ -165,12 +192,12 @@ def clip_path(path):
         clip_one(t, s, v, o, threshold=0.8)
 
 
-# 定义命令行参数
-# * -t txt文件
+# 定义命令行参数, 必要时可以指定这些文件，否则默认为输入的是txt文件或者是路径。
 # * -s 字幕文件
 # * -v 视频文件
 # * -o 输出文件
-# * -p 路径，扫描路径下所有同名或类似名文件
+# 
+# 如果输入的是目录路径，则遍历其下所有txt文件。
 
 # In[ ]:
 
@@ -180,19 +207,26 @@ def arg_parse():
     解析命令行参数
     '''
     # 创建解析步骤
-    parser = argparse.ArgumentParser(description='Process TTS')
+    parser = argparse.ArgumentParser(description='Clip video based on txt summary file.')
 
     # 添加参数步骤
-    parser.add_argument('-t','--txt',  type=str, 
-                       help='txt file, the summary')
+    parser.add_argument("input", type=str,
+                       help="a txt file or a path.")
+    
+    
+#     parser.add_argument('-t','--txt',  type=str, 
+#                        help='txt file, the summary')
+#     parser.add_argument('-p','--path',  type=str, 
+#                        help='path')
+    
+    
     parser.add_argument('-s','--sub',  type=str, 
                        help='subtitle file')    
     parser.add_argument('-v','--video',  type=str, 
                        help='video file')
     parser.add_argument('-o','--output',  type=str, 
                        help='output video file')
-    parser.add_argument('-p','--path',  type=str, 
-                       help='path')
+
 
     # 解析参数步骤  
     args = parser.parse_args()
@@ -205,24 +239,25 @@ def arg_parse():
 if __name__=="__main__":
     args=arg_parse()
     sub_format=("srt","vtt")
-    video_format=("mp4","mov")
+    video_format=("mp4","mov","mkv")
     
-    if args.txt: # 处理单个文件
-        path=os.path.dirname(args.txt)
+    if os.path.isfile(args.input): # 处理单个文件
+        
+        path=os.path.dirname(args.input)
         if path=="": # 如果是本地目录
             path=os.path.abspath(os.path.dirname(__file__))
         if args.sub==None:
-            args.sub=get_most_simliar_filename(args.txt, path, sub_format)
+            args.sub=get_most_simliar_filename(args.input, path, sub_format)
         if args.video==None:
-            args.video=get_most_simliar_filename(args.txt, path, video_format)
+            args.video=get_most_simliar_filename(args.input, path, video_format)
         if args.output==None:
             v=args.video
             args.output=os.path.join(os.path.dirname(v),"summary_"+os.path.basename(v))
         
-        clip_one(args.txt, args.sub, args.video, args.output,threshold=0.8)
+        clip_one(args.input, args.sub, args.video, args.output,threshold=0.8)
         
-    elif args.path: # 处理目录下所有文件
-        clip_path(args.path)
+    elif os.path.isdir(args.input): # 处理目录下所有txt文件
+        clip_path(args.input)
     
 
 
